@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ouvrir ou fermer ?</title>
+<meta name="theme-color" content="#0e1b21">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ouvrir ?">
+<style>
+  :root{
+    --bg:#0e1b21;
+    --surface:#16282f;
+    --surface-2:#1d343c;
+    --line:#2a4750;
+    --ink:#e9f1f0;
+    --muted:#8fa9a9;
+    --faint:#5f7a7a;
+    /* thermal poles */
+    --hot:#ef8f5a;        /* chaud → fermer */
+    --hot-strong:#e8654f; /* trop chaud */
+    --cool:#54d6b0;       /* frais → ouvrir */
+    --cool-2:#46c2dd;     /* humide-frais */
+    --amber:#f4b860;
+    --display:ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono:ui-monospace, "SF Mono", "SFMono-Regular", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+    --body:system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:var(--body); line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+    padding:28px 18px 60px;
+  }
+  .wrap{max-width:720px; margin:0 auto;}
+
+  header{margin-bottom:22px;}
+  h1{
+    font-family:var(--display); font-weight:700; font-size:30px;
+    letter-spacing:-0.02em; margin:0 0 4px;
+  }
+  h1 .grad{
+    background:linear-gradient(90deg,var(--hot),var(--amber),var(--cool));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .sub{color:var(--muted); font-size:14px; max-width:48ch;}
+
+  /* mode toggle */
+  .modes{display:flex; gap:6px; background:var(--surface); padding:5px;
+    border-radius:12px; margin:22px 0 16px; border:1px solid var(--line);}
+  .modes button{
+    flex:1; border:0; background:transparent; color:var(--muted);
+    font-family:var(--body); font-weight:600; font-size:14px;
+    padding:9px 10px; border-radius:8px; cursor:pointer; transition:.18s;
+  }
+  .modes button .m-sub{display:block; font-weight:400; font-size:11px; color:var(--faint); margin-top:2px;}
+  .modes button.on{background:var(--surface-2); color:var(--ink); box-shadow:0 1px 0 rgba(0,0,0,.25);}
+  .modes button.on .m-sub{color:var(--muted);}
+
+  .band{display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:-6px 0 16px;
+    padding:11px 14px; background:var(--surface); border:1px solid var(--line); border-radius:12px;}
+  .band-lbl{font-size:12px; color:var(--muted); font-weight:600;}
+  .band-inputs{display:flex; align-items:center; gap:6px;}
+  .band-dash{color:var(--faint);}
+  .band-note{font-size:11px; color:var(--faint); margin-left:auto;}
+
+  /* inputs */
+  .panels{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  @media(max-width:540px){ .panels{grid-template-columns:1fr;} }
+  .panel{background:var(--surface); border:1px solid var(--line);
+    border-radius:14px; padding:16px;}
+  .panel h2{font-family:var(--display); font-size:13px; font-weight:600;
+    text-transform:uppercase; letter-spacing:.12em; margin:0 0 14px;
+    display:flex; align-items:center; gap:8px;}
+  .dot{width:8px; height:8px; border-radius:50%;}
+  .dot.in{background:var(--hot);} .dot.out{background:var(--cool-2);}
+  .field{margin-bottom:12px;}
+  .field:last-child{margin-bottom:0;}
+  .field label{display:block; font-size:12px; color:var(--muted); margin-bottom:5px;}
+  .row{display:flex; align-items:center; gap:10px;}
+  input[type=range]{flex:1; accent-color:var(--amber); height:4px;}
+  .val{font-family:var(--mono); font-weight:600; font-size:15px; min-width:62px; text-align:right;}
+  .num{width:62px; background:var(--bg); border:1px solid var(--line); color:var(--ink);
+    font-family:var(--mono); font-size:14px; border-radius:7px; padding:5px 7px; text-align:right;}
+  .city-row{display:flex; gap:8px; margin-top:14px;}
+  .city{flex:1; background:var(--bg); border:1px solid var(--line); color:var(--ink);
+    font-family:var(--body); font-size:13px; border-radius:9px; padding:9px 11px;}
+  .city::placeholder{color:var(--faint);}
+  .city:focus{outline:none; border-color:var(--cool-2);}
+  .fetch{border:1px dashed var(--line); background:transparent;
+    color:var(--cool-2); font-family:var(--body); font-weight:600; font-size:13px;
+    padding:9px 14px; border-radius:9px; cursor:pointer; transition:.18s; white-space:nowrap;}
+  .fetch:hover{background:var(--surface-2); border-color:var(--cool-2);}
+  .fetch[disabled]{opacity:.6; cursor:wait;}
+  .fetch-msg{font-size:11px; color:var(--faint); margin-top:7px; min-height:14px;}
+
+  /* verdict — la signature */
+  .verdict{position:relative; overflow:hidden; margin:18px 0;
+    border:1px solid var(--line); border-radius:16px; background:var(--surface);
+    padding:22px 22px 20px 26px; box-shadow:inset 6px 0 0 var(--amber); transition:.3s;}
+  .verdict .word{font-family:var(--display); font-weight:700; font-size:38px;
+    letter-spacing:-0.02em; line-height:1; margin:0; transition:.2s;}
+  .verdict .word small{font-size:18px; font-weight:600; opacity:.85;}
+  .verdict .why{color:var(--ink); font-size:14.5px; margin:12px 0 0; max-width:54ch;}
+  .verdict .why b{color:#fff; font-weight:600;}
+
+  /* double indicateur ressenti / réel */
+  .dual{flex-direction:column; gap:6px; margin-top:14px; padding-top:14px; border-top:1px solid var(--line);}
+  .d-row{display:flex; align-items:center; gap:10px; font-size:13px;}
+  .d-k{font-family:var(--display); font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:var(--muted); width:62px;}
+  .d-v{font-family:var(--mono); font-weight:600; color:var(--ink); width:78px;}
+  .d-tag{font-size:12px; color:var(--muted);}
+  .d-tag.good{color:var(--cool);} .d-tag.bad{color:var(--hot);} .d-tag.flat{color:var(--faint);}
+
+  /* encadré repli (volets / ventilateur) */
+  .fallback{margin:-6px 0 18px; padding:14px 16px; background:rgba(244,184,96,.08);
+    border:1px solid rgba(244,184,96,.35); border-radius:12px; font-size:13.5px; line-height:1.6; color:var(--ink);}
+  .fallback b{color:#fff; font-weight:600;}
+
+  /* thermo gradient bar */
+  .bar-wrap{margin-top:16px;}
+  .bar{position:relative; height:10px; border-radius:6px;
+    background:linear-gradient(90deg,var(--cool) 0%,var(--amber) 55%,var(--hot-strong) 100%);}
+  .tick{position:absolute; top:-5px; width:2px; height:20px; transform:translateX(-1px);}
+  .tick.tin{background:var(--ink);}
+  .tick.tout{background:#0b1418; box-shadow:0 0 0 2px var(--ink);}
+  .bar-legend{display:flex; justify-content:space-between; font-family:var(--mono);
+    font-size:10.5px; color:var(--faint); margin-top:6px;}
+
+  /* readouts */
+  .grid{display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-top:6px;}
+  .cell{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:13px 14px;}
+  .cell .k{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em;}
+  .cell .vrow{display:flex; justify-content:space-between; align-items:baseline; margin-top:8px; gap:8px;}
+  .cell .vv{font-family:var(--mono); font-size:18px; font-weight:600;}
+  .cell .lbl{font-size:11px; color:var(--faint);}
+  .pin{color:var(--hot);} .pout{color:var(--cool-2);}
+  .winner{font-size:11px; margin-top:9px; color:var(--muted);}
+  .winner b{color:var(--cool);}
+
+  /* prévision horaire */
+  .forecast{margin-top:18px; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:16px;}
+  .fc-head{display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:10px;}
+  .fc-head h2{font-family:var(--display); font-size:13px; font-weight:600; text-transform:uppercase; letter-spacing:.12em; margin:0;}
+  .fc-place{font-size:11px; color:var(--faint); font-family:var(--mono);}
+  .fc-advice{font-size:14.5px; margin:0 0 14px;} .fc-advice b{color:#fff; font-weight:600;}
+  .fc-strip{display:flex; gap:3px; overflow-x:auto; padding-bottom:6px;}
+  .fc-h{flex:0 0 auto; width:30px; text-align:center;}
+  .fc-h .hr{font-family:var(--mono); font-size:10px; color:var(--faint); margin-bottom:4px;}
+  .fc-h .col{height:46px; border-radius:5px; display:flex; align-items:flex-end; justify-content:center;
+    padding-bottom:2px; font-family:var(--mono); font-size:9px; color:#06121420;}
+  .fc-h .col.open{background:var(--cool);} .fc-h .col.soft{background:var(--amber);}
+  .fc-h .col.shut{background:var(--surface-2); border:1px solid var(--line);}
+  .fc-h .col.now{outline:2px solid var(--ink); outline-offset:1px;}
+  .fc-h .col.best{box-shadow:0 0 0 2px var(--cool-2);}
+  .fc-h .t{font-family:var(--mono); font-size:9.5px; color:var(--muted); margin-top:3px;}
+  .fc-h .rain{height:12px; font-size:9px; line-height:12px; text-align:center;}
+  .fc-legend{display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-top:12px; font-size:11px; color:var(--muted);}
+  .fc-legend .sw{display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:5px; vertical-align:-1px;}
+  .sw.open{background:var(--cool);} .sw.soft{background:var(--amber);} .sw.shut{background:var(--surface-2); border:1px solid var(--line);}
+  .fc-note{color:var(--faint); margin-left:auto;}
+
+  details{margin-top:24px; background:var(--surface); border:1px solid var(--line); border-radius:12px;}
+  summary{cursor:pointer; padding:13px 16px; font-weight:600; font-size:13px; color:var(--muted);
+    font-family:var(--display); letter-spacing:.04em;}
+  details[open] summary{border-bottom:1px solid var(--line);}
+  .meth{padding:14px 18px; font-size:13px; color:var(--muted);}
+  .meth p{margin:0 0 10px;} .meth code{font-family:var(--mono); color:var(--amber); font-size:12px;}
+  .meth b{color:var(--ink);}
+  footer{margin-top:18px; font-size:11px; color:var(--faint); text-align:center;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>J'<span class="grad">ouvre</span>, ou pas&nbsp;?</h1>
+    <p class="sub">Entre la température et l'humidité dedans et dehors. L'outil compare la chaleur <em>et</em> l'eau réellement contenue dans l'air — pas juste les degrés.</p>
+  </header>
+
+  <div class="modes">
+    <button id="m-cool" class="on" onclick="setMode('cool')">Rafraîchir
+      <span class="m-sub">faire baisser la température</span></button>
+    <button id="m-dry" onclick="setMode('dry')">Assainir
+      <span class="m-sub">viser une humidité confortable</span></button>
+  </div>
+
+  <div class="band" id="band" hidden>
+    <span class="band-lbl">Zone d'humidité visée</span>
+    <div class="band-inputs">
+      <input type="number" class="num" id="bandLo" min="20" max="70" step="1" value="40"><span class="lbl">%</span>
+      <span class="band-dash">→</span>
+      <input type="number" class="num" id="bandHi" min="30" max="80" step="1" value="60"><span class="lbl">%</span>
+    </div>
+    <span class="band-note">ADEME/Anses : 40–60 % (hiver plutôt 40–50, été 50–60)</span>
+  </div>
+
+  <div class="panels">
+    <div class="panel">
+      <h2><span class="dot in"></span>Intérieur</h2>
+      <div class="field">
+        <label>Température</label>
+        <div class="row">
+          <input type="range" id="tin" min="5" max="40" step="0.1" value="28">
+          <input type="number" class="num" id="tinN" min="5" max="40" step="0.1" value="28"><span class="lbl">°C</span>
+        </div>
+      </div>
+      <div class="field">
+        <label>Humidité relative</label>
+        <div class="row">
+          <input type="range" id="hin" min="10" max="100" step="1" value="55">
+          <input type="number" class="num" id="hinN" min="10" max="100" step="1" value="55"><span class="lbl">%</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2><span class="dot out"></span>Extérieur</h2>
+      <div class="field">
+        <label>Température</label>
+        <div class="row">
+          <input type="range" id="tout" min="-5" max="42" step="0.1" value="22">
+          <input type="number" class="num" id="toutN" min="-5" max="42" step="0.1" value="22"><span class="lbl">°C</span>
+        </div>
+      </div>
+      <div class="field">
+        <label>Humidité relative</label>
+        <div class="row">
+          <input type="range" id="hout" min="10" max="100" step="1" value="70">
+          <input type="number" class="num" id="houtN" min="10" max="100" step="1" value="70"><span class="lbl">%</span>
+        </div>
+      </div>
+      <div class="city-row">
+        <input type="text" id="city" class="city" placeholder="Ville (ex. Nantes, Lyon, Lisboa…)" value="Nantes" autocomplete="off">
+        <button class="fetch" id="fetchBtn" onclick="fetchOutside()">⤓ Relever</button>
+      </div>
+      <div class="fetch-msg" id="fetchMsg"></div>
+    </div>
+  </div>
+
+  <div class="verdict" id="verdict">
+    <p class="word" id="word">—</p>
+    <p class="why" id="why"></p>
+    <div class="dual" id="dual" style="display:none"></div>
+    <div class="bar-wrap">
+      <div class="bar">
+        <div class="tick tin" id="tickIn" title="intérieur"></div>
+        <div class="tick tout" id="tickOut" title="extérieur"></div>
+      </div>
+      <div class="bar-legend"><span>frais</span><span>tempéré</span><span>chaud</span></div>
+    </div>
+  </div>
+
+  <div class="fallback" id="fallback" hidden></div>
+
+  <div class="grid">
+    <div class="cell">
+      <div class="k">Point de rosée</div>
+      <div class="vrow"><span class="vv pin" id="dewIn">–</span><span class="lbl">dedans</span></div>
+      <div class="vrow"><span class="vv pout" id="dewOut">–</span><span class="lbl">dehors</span></div>
+      <div class="winner" id="dewWin"></div>
+    </div>
+    <div class="cell">
+      <div class="k">Humidité absolue</div>
+      <div class="vrow"><span class="vv pin" id="ahIn">–</span><span class="lbl">dedans</span></div>
+      <div class="vrow"><span class="vv pout" id="ahOut">–</span><span class="lbl">dehors</span></div>
+      <div class="winner" id="ahWin"></div>
+    </div>
+    <div class="cell">
+      <div class="k">Enthalpie (chaleur totale)</div>
+      <div class="vrow"><span class="vv pin" id="hIn">–</span><span class="lbl">dedans</span></div>
+      <div class="vrow"><span class="vv pout" id="hOut">–</span><span class="lbl">dehors</span></div>
+      <div class="winner" id="hWin"></div>
+    </div>
+    <div class="cell">
+      <div class="k">HR de l'air entrant, une fois réchauffé à T° int.</div>
+      <div class="vrow"><span class="vv pout" id="rhWarm">–</span><span class="lbl">vs <span id="rhInRef">–</span> dedans</span></div>
+      <div class="winner" id="rhWin"></div>
+    </div>
+  </div>
+
+  <section class="forecast" id="forecast" hidden>
+    <div class="fc-head">
+      <h2>Prévision — quand ouvrir</h2>
+      <span class="fc-place" id="fcPlace"></span>
+    </div>
+    <p class="fc-advice" id="fcAdvice"></p>
+    <div class="fc-strip" id="fcStrip"></div>
+    <div class="fc-legend">
+      <span><i class="sw open"></i> ouvre</span>
+      <span><i class="sw soft"></i> avec réserve</span>
+      <span><i class="sw shut"></i> garde fermé</span>
+      <span class="fc-note">réf. intérieure = tes valeurs actuelles (supposées stables)</span>
+    </div>
+  </section>
+
+  <details>
+    <summary>Méthode &amp; formules</summary>
+    <div class="meth">
+      <p><b>Pourquoi pas l'humidité relative&nbsp;?</b> La HR dépend de la température : 70&nbsp;% à 18&nbsp;°C dehors contient bien moins d'eau que 55&nbsp;% à 28&nbsp;°C dedans. En entrant, l'air froid se réchauffe et sa HR chute. Il faut donc comparer la quantité réelle d'eau — point de rosée ou humidité absolue.</p>
+      <p><b>Pression de vapeur saturante</b> (Magnus-Tetens) : <code>es = 6,112·exp(17,62·T / (243,12+T))</code> hPa.</p>
+      <p><b>Point de rosée</b> : à partir de <code>e = HR/100·es</code>, puis inversion de Magnus. C'est la meilleure mesure pour comparer l'eau réellement contenue dans deux masses d'air.</p>
+      <p><b>Mode «&nbsp;assainir&nbsp;»</b> : on vise une <b>fourchette de confort</b> (40–60 % par défaut, recommandation ADEME/Anses). Le moteur calcule l'HR que l'air extérieur atteindrait <em>une fois réchauffé à ta température intérieure</em> : <code>HR↗ = e(T_ext, HR_ext) / es(T_int)</code>. Ouvrir tire ton HR vers cette valeur. L'outil conseille d'ouvrir seulement si ça te <b>rapproche de la fourchette</b>, et reste neutre quand tu y es déjà — pas de sur-assèchement.</p>
+      <p><b>Humidité absolue</b> : <code>AH = 216,7·e / (273,15+T)</code> en g/m³.</p>
+      <p><b>Enthalpie de l'air humide</b> : <code>h = 1,006·T + r·(2501 + 1,86·T)</code> kJ/kg (r = ratio de mélange). Elle additionne chaleur sensible et latente — utilisée pour repérer le créneau de <em>déstockage</em> nocturne dans la prévision.</p>
+      <p><b>Température ressentie</b> (Steadman / Bureau of Meteorology) : <code>T_ressentie = T + 0,33·e − 0,70·vent − 4</code>. Elle fond chaleur et humidité en une seule valeur de confort. Le verdict «&nbsp;rafraîchir&nbsp;» affiche deux lectures : le <b>ressenti</b> (est-ce agréable maintenant) et le <b>réel</b> (est-ce que tu déstockes la chaleur des murs) — qui peuvent diverger.</p>
+      <p><b>Repli ventilateur</b> : au-delà de ~35 °C, Santé publique France et l'OMS déconseillent le ventilateur seul (il projette de l'air chaud et accélère la déshydratation). Source citée dans la réponse.</p>
+      <p style="color:var(--faint)">Calculs côté client, pression 1013 hPa. Pluie et vent issus du relevé modulent le conseil. Limite restante : pas de modèle d'inertie des murs — l'outil dit quand l'air du dehors devient meilleur, pas combien de temps le frais tiendra.</p>
+    </div>
+  </details>
+
+  <footer>Outil local — aucune donnée envoyée, sauf le relevé météo si tu cliques sur le bouton.</footer>
+</div>
+
+<script>
+const P = 1013.25; // hPa
+let mode = 'cool';
+let fc = null; // données de prévision horaire
+
+const $ = id => document.getElementById(id);
+
+// --- physique ---
+function es(T){ return 6.112 * Math.exp((17.62*T)/(243.12+T)); }          // hPa
+function vapor(T,RH){ return (RH/100) * es(T); }                          // e, hPa
+function dewPoint(T,RH){
+  const e = vapor(T,RH);
+  const g = Math.log(e/6.112);
+  return 243.12*g/(17.62-g);
+}
+function absHum(T,RH){ return 216.7 * vapor(T,RH) / (273.15+T); }         // g/m³
+function mixRatio(T,RH){ const e = vapor(T,RH); return 621.97*e/(P-e); }  // g/kg
+function enthalpy(T,RH){ const r = mixRatio(T,RH)/1000; return 1.006*T + r*(2501+1.86*T); } // kJ/kg
+function rhWhenWarmed(Tout,RHout,Tin){ return Math.min(100, vapor(Tout,RHout)/es(Tin)*100); }
+// température ressentie (Steadman / Bureau of Meteorology) : fond chaleur + humidité (+ vent)
+function apparentTemp(T,RH,windMs){ return T + 0.33*vapor(T,RH) - 0.70*(windMs||0) - 4.00; }
+
+let ext=null; // conditions courantes du relevé : {precip, wind} (vent en km/h)
+
+function dewLabel(d){
+  if(d<10) return "très sec";
+  if(d<13) return "agréable, sec";
+  if(d<16) return "confortable";
+  if(d<18) return "un peu lourd";
+  if(d<21) return "humide, désagréable";
+  return "oppressant";
+}
+
+// --- UI sync ---
+function bind(rangeId,numId){
+  const r=$(rangeId), n=$(numId);
+  r.addEventListener('input',()=>{ n.value=r.value; ext=null; compute(); });
+  n.addEventListener('input',()=>{ r.value=n.value; ext=null; compute(); });
+}
+['tin tinN','hin hinN','tout toutN','hout houtN'].forEach(p=>{const[a,b]=p.split(' ');bind(a,b);});
+
+function setMode(m){
+  mode=m;
+  $('m-cool').classList.toggle('on', m==='cool');
+  $('m-dry').classList.toggle('on', m==='dry');
+  $('band').hidden = (m!=='dry');
+  compute();
+}
+$('bandLo').addEventListener('input',compute);
+$('bandHi').addEventListener('input',compute);
+
+// --- relevé météo pour la ville choisie (géocodage + météo Open-Meteo) ---
+async function fetchOutside(){
+  const btn=$('fetchBtn'), msg=$('fetchMsg');
+  const q=$('city').value.trim();
+  if(!q){ msg.style.color='var(--hot)'; msg.textContent='Indique une ville.'; return; }
+  btn.disabled=true; msg.style.color='var(--faint)'; msg.textContent='Relevé en cours…';
+  try{
+    // 1) ville -> coordonnées
+    const geoURL='https://geocoding-api.open-meteo.com/v1/search?name='
+      +encodeURIComponent(q)+'&count=1&language=fr&format=json';
+    const g=await (await fetch(geoURL)).json();
+    if(!g.results || !g.results.length) throw {kind:'notfound'};
+    const r=g.results[0];
+    const place=[r.name, r.admin1, r.country].filter(Boolean).join(', ');
+    // 2) coordonnées -> météo courante + prévision horaire (+ pluie, vent)
+    const wURL='https://api.open-meteo.com/v1/forecast?latitude='+r.latitude
+      +'&longitude='+r.longitude
+      +'&current=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m'
+      +'&hourly=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m&forecast_days=2&timezone=auto';
+    const w=await (await fetch(wURL)).json();
+    const t=w.current.temperature_2m, h=w.current.relative_humidity_2m;
+    $('tout').value=t; $('toutN').value=t;
+    $('hout').value=h; $('houtN').value=h;
+    ext={precip:w.current.precipitation, wind:w.current.wind_speed_10m};
+    // stocker la prévision à partir de l'heure courante
+    fc=null;
+    if(w.hourly && w.hourly.time){
+      const nowStr=w.current.time;
+      let i0=w.hourly.time.findIndex(ts=>ts>=nowStr);
+      if(i0<0) i0=0;
+      fc={place, hours:[]};
+      for(let i=i0; i<Math.min(i0+18, w.hourly.time.length); i++){
+        fc.hours.push({t:w.hourly.temperature_2m[i], rh:w.hourly.relative_humidity_2m[i],
+          precip:w.hourly.precipitation[i], wind:w.hourly.wind_speed_10m[i],
+          label:w.hourly.time[i].slice(11,13)});
+      }
+    }
+    compute();
+    msg.style.color='var(--cool)';
+    msg.textContent=`${place} · ${t} °C, ${h} % · ${new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}`;
+  }catch(e){
+    msg.style.color='var(--hot)';
+    msg.textContent = e && e.kind==='notfound'
+      ? 'Ville introuvable — précise (ex. « Nantes, France »).'
+      : "Relevé bloqué ici (aperçu). Une fois le fichier en ligne ou ouvert en local, ça marche. Sinon saisis à la main.";
+  }finally{ btn.disabled=false; }
+}
+// Entrée clavier déclenche le relevé
+document.getElementById('city').addEventListener('keydown',e=>{ if(e.key==='Enter') fetchOutside(); });
+
+// --- moteur de décision ---
+function compute(){
+  const Tin=+$('tin').value, RHin=+$('hin').value;
+  const Tout=+$('tout').value, RHout=+$('hout').value;
+
+  const dewI=dewPoint(Tin,RHin), dewO=dewPoint(Tout,RHout);
+  const ahI=absHum(Tin,RHin),   ahO=absHum(Tout,RHout);
+  const hI=enthalpy(Tin,RHin),  hO=enthalpy(Tout,RHout);
+  const rhW=rhWhenWarmed(Tout,RHout,Tin);
+
+  // readouts
+  $('dewIn').textContent=dewI.toFixed(1)+' °C';
+  $('dewOut').textContent=dewO.toFixed(1)+' °C';
+  $('dewWin').innerHTML = Math.abs(dewI-dewO)<0.4 ? 'équivalent' :
+    (dewO<dewI ? 'dehors <b>plus sec</b>' : 'dehors plus humide');
+  $('ahIn').textContent=ahI.toFixed(1)+' g/m³';
+  $('ahOut').textContent=ahO.toFixed(1)+' g/m³';
+  $('ahWin').innerHTML = Math.abs(ahI-ahO)<0.3 ? 'équivalent' :
+    (ahO<ahI ? 'dehors <b>moins chargé</b>' : 'dehors plus chargé');
+  $('hIn').textContent=hI.toFixed(1)+' kJ/kg';
+  $('hOut').textContent=hO.toFixed(1)+' kJ/kg';
+  $('hWin').innerHTML = Math.abs(hI-hO)<0.6 ? 'équivalent' :
+    (hO<hI ? 'dehors <b>plus léger</b>' : 'dehors plus lourd');
+  $('rhWarm').textContent=Math.round(rhW)+' %';
+  $('rhInRef').textContent=Math.round(RHin)+' %';
+  $('rhWin').innerHTML = rhW<RHin-2 ? 'fait <b>baisser</b> ton HR' :
+    (rhW>RHin+2 ? 'fait monter ton HR' : 'HR ≈ stable');
+
+  // ticks sur la barre (échelle 5→42 °C)
+  const pos = t => Math.max(0,Math.min(100,(t-5)/(42-5)*100));
+  $('tickIn').style.left = pos(Tin)+'%';
+  $('tickOut').style.left = pos(Tout)+'%';
+
+  const dT=Tin-Tout, dH=hI-hO, dDew=dewI-dewO;
+  // ressenti : air au repos (vent 0) dedans vs air extérieur qu'on ferait entrer
+  const atI=apparentTemp(Tin,RHin,0), atO=apparentTemp(Tout,RHout,0);
+  const dAT=atI-atO; // >0 : dehors plus agréable au ressenti
+  let word, why, color, dual='';
+
+  if(mode==='cool'){
+    // double lecture : confort immédiat (ressenti) + déstockage (température réelle)
+    dual = `<span class="d-row"><span class="d-k">ressenti</span>`
+      +`<span class="d-v">${atI.toFixed(0)}° → ${atO.toFixed(0)}°</span>`
+      +`<span class="d-tag ${dAT>0.3?'good':dAT<-0.3?'bad':'flat'}">${dAT>0.3?'plus agréable':dAT<-0.3?'moins agréable':'≈'}</span></span>`
+      +`<span class="d-row"><span class="d-k">réel</span>`
+      +`<span class="d-v">${Tin.toFixed(0)}° → ${Tout.toFixed(0)}°</span>`
+      +`<span class="d-tag ${dT>0.5?'good':dT<-0.5?'bad':'flat'}">${dT>0.5?'refroidit la pièce':dT<-0.5?'réchauffe':'≈'}</span></span>`;
+
+    const feelsBetter = dAT>0.3, cools = dT>0.5;
+    if(feelsBetter && cools){
+      word='OUVRE'; color='var(--cool)';
+      why=`Gain sur les deux tableaux : <b>plus agréable au ressenti</b> (−${dAT.toFixed(1)} °C ressentis) <b>et</b> tu <b>refroidis la pièce</b> (−${dT.toFixed(1)} °C réels, ça déstocke la chaleur des murs). Ouvre en grand, courant d'air traversant si possible.`;
+    } else if(feelsBetter && !cools){
+      word='OUVRE <small>— confort immédiat</small>'; color='var(--amber)';
+      why=`L'air du dehors est <b>plus agréable</b> (−${dAT.toFixed(1)} °C ressentis, surtout parce qu'il est plus sec) <b>mais pas plus frais en réalité</b> (${dT>=0?'−':'+'}${Math.abs(dT).toFixed(1)} °C). Bon pour le confort tout de suite ; ça ne décharge pas la chaleur des murs, qui te la rendront ensuite.`;
+    } else if(!feelsBetter && cools){
+      word='OUVRE <small>— pour déstocker</small>'; color='var(--amber)';
+      why=`Dehors c'est <b>plus frais en réalité</b> (−${dT.toFixed(1)} °C) mais l'air est si humide que le <b>ressenti ne s'améliore guère</b> (${dAT>=0?'−':'+'}${Math.abs(dAT).toFixed(1)} °C ressentis). Utile la nuit pour <b>décharger les murs</b> même si l'air entrant est moite ; moins pour le plaisir immédiat.`;
+    } else {
+      word='FERME'; color='var(--hot-strong)';
+      why=`Ni plus agréable ni plus frais dehors (ressenti ${dAT>=0?'−':'+'}${Math.abs(dAT).toFixed(1)} °C, réel ${dT>=0?'−':'+'}${Math.abs(dT).toFixed(1)} °C). Ouvrir n'apporte rien, voire réchauffe. Garde fermé.`;
+    }
+  } else { // assainir : viser la fourchette de confort
+    const lo=+$('bandLo').value, hi=+$('bandHi').value;
+    // rW = HR que l'air entrant atteindrait une fois réchauffé à T° intérieure
+    // ouvrir tire ton HR intérieure vers rW.
+    if(RHin>hi){ // trop humide
+      if(rhW<=hi){
+        word='OUVRE'; color='var(--cool)';
+        why=`Trop humide chez toi (<b>${Math.round(RHin)} %</b>, au-dessus de ${hi} %). L'air du dehors, réchauffé à ${Tin.toFixed(0)} °C, tomberait à ~<b>${Math.round(rhW)} %</b> : ouvrir te ramène <b>dans la zone confortable</b>. Aère franchement.`;
+      } else if(rhW<RHin-1){
+        word='OUVRE <small>— partiellement</small>'; color='var(--amber)';
+        why=`Trop humide chez toi (<b>${Math.round(RHin)} %</b>). L'air entrant ferait ~${Math.round(rhW)} % : ouvrir <b>assèche un peu</b> mais ne suffit pas à atteindre ${hi} %. Utile en complément (avec déshumidificateur, cuisson couverte, etc.).`;
+      } else {
+        word='FERME'; color='var(--hot-strong)';
+        why=`Trop humide chez toi (<b>${Math.round(RHin)} %</b>), mais l'air du dehors ne t'aiderait pas (~${Math.round(rhW)} % une fois réchauffé, soit autant ou plus). Garde fermé pour l'humidité ; aère juste quelques minutes pour l'air vicié, et vise un moment plus sec.`;
+      }
+    } else if(RHin<lo){ // trop sec
+      if(rhW>RHin+1){
+        word='OUVRE'; color='var(--cool)';
+        why=`Un peu sec chez toi (<b>${Math.round(RHin)} %</b>, sous ${lo} %). L'air entrant est plus humide (~${Math.round(rhW)} %) : ouvrir te <b>rapproche de la zone confortable</b>.`;
+      } else {
+        word='FERME'; color='var(--amber)';
+        why=`Plutôt sec chez toi (<b>${Math.round(RHin)} %</b>). Ouvrir assécherait davantage (air entrant ~${Math.round(rhW)} %). Inutile pour l'humidité — n'aère que brièvement pour renouveler l'air.`;
+      }
+    } else { // déjà dans la fourchette
+      word='CONFORT'; color='var(--cool)';
+      const drift = rhW<lo-3 ? ` Évite seulement de <b>sur-aérer</b> longtemps : l'air entrant est sec (~${Math.round(rhW)} %) et finirait par te faire descendre sous ${lo} %.`
+                  : rhW>hi+3 ? ` Attention à ne pas trop prolonger : l'air entrant est humide (~${Math.round(rhW)} %) et te ferait remonter au-dessus de ${hi} %.`
+                  : '';
+      why=`Tu es <b>déjà dans la zone confortable</b> (${Math.round(RHin)} %, entre ${lo} et ${hi} %). Rien à corriger côté humidité : aère selon ton envie pour l'air vicié / le CO₂.${drift}`;
+    }
+  }
+
+  // modulation pluie / vent (uniquement si relevé récent, données fiables)
+  let mod='';
+  if(ext){
+    const isOpen = /OUVRE/.test(word);
+    if(ext.precip>0.1 && isOpen)
+      mod += ` 🌧️ Pluie en cours (${ext.precip.toFixed(1)} mm) : entrebâille plutôt qu'ouvrir en grand, ou ouvre côté abrité du vent.`;
+    if(ext.wind>=20 && isOpen)
+      mod += ` 💨 Vent soutenu (${Math.round(ext.wind)} km/h) : l'échange d'air sera rapide, un créneau court suffit.`;
+  }
+  why += mod;
+
+  // repli : que faire quand la fenêtre n'aide pas et qu'il fait chaud
+  let fb='';
+  const noWindowGain = (mode==='cool' && word==='FERME') || (mode==='dry' && Tin>=27);
+  if(noWindowGain && Tin>=26){
+    const fanSafe = Tin<35;
+    fb = `<b>La fenêtre ne t'aidera pas là.</b> Tes vrais leviers à cet instant :<br>`
+      + `• <b>Occulte le soleil</b> (volets/stores côté ensoleillé) — l'apport solaire par la toiture est la 1ʳᵉ source de chaleur d'un comble.<br>`
+      + (fanSafe
+          ? `• <b>Ventilateur</b> pour brasser l'air : il abaisse le ressenti de plusieurs degrés tant que la pièce reste sous ~35 °C.`
+          : `• <b>Évite le ventilateur seul</b> : à ${Tin.toFixed(0)} °C (au-delà de ~35 °C), Santé publique France et l'OMS le déconseillent — il projette de l'air chaud et accélère la déshydratation. Privilégie linge humide, douche tiède, hydratation.`);
+  }
+
+  $('word').innerHTML=word;
+  $('why').innerHTML=why;
+  $('word').style.color=color;
+  $('verdict').style.boxShadow=`inset 6px 0 0 ${color}`; // barre latérale colorée
+  $('dual').innerHTML=dual;
+  $('dual').style.display = dual ? 'flex' : 'none';
+  $('fallback').innerHTML=fb;
+  $('fallback').hidden = !fb;
+
+  renderForecast();
+}
+
+// classe une heure : 'open' / 'soft' / 'shut' selon le mode et la réf. intérieure
+function classifyHour(To,RHo, Tin,RHin){
+  if(mode==='cool'){
+    if(To >= Tin-0.5) return 'shut';
+    return enthalpy(To,RHo) <= enthalpy(Tin,RHin) ? 'open' : 'soft';
+  } else {
+    const lo=+$('bandLo').value, hi=+$('bandHi').value;
+    const rW=rhWhenWarmed(To,RHo,Tin); // HR de l'air entrant une fois réchauffé
+    if(RHin>hi){            // trop humide : on veut faire baisser
+      if(rW<=hi)        return 'open';   // ramène dans la zone
+      if(rW<RHin-1)     return 'soft';   // assèche un peu, sans atteindre la zone
+      return 'shut';                     // n'aide pas
+    } else if(RHin<lo){    // trop sec : on veut faire monter
+      return rW>RHin+1 ? 'open' : 'shut';
+    } else {               // déjà dans la zone
+      return (rW>=lo && rW<=hi) ? 'open' : 'soft'; // open = aération sans risque de sortir de la zone
+    }
+  }
+}
+
+function renderForecast(){
+  const box=$('forecast');
+  if(!fc || !fc.hours.length){ box.hidden=true; return; }
+  box.hidden=false;
+  $('fcPlace').textContent=fc.place;
+
+  const Tin=+$('tin').value, RHin=+$('hin').value;
+  const cls = fc.hours.map(h=>classifyHour(h.t,h.rh,Tin,RHin));
+
+  // meilleure heure : cool = enthalpie mini ; assainir = HR-réchauffée la plus proche de la zone visée
+  const lo=+$('bandLo').value, hi=+$('bandHi').value, mid=(lo+hi)/2;
+  let bestIdx=-1, bestVal=Infinity;
+  fc.hours.forEach((h,i)=>{
+    if(cls[i]==='shut') return;
+    let v;
+    if(mode==='cool'){ v = enthalpy(h.t,h.rh); }
+    else { const rW=rhWhenWarmed(h.t,h.rh,Tin);
+           v = (rW>=lo&&rW<=hi) ? Math.abs(rW-mid) : Math.min(Math.abs(rW-lo),Math.abs(rW-hi))+100; }
+    if(v<bestVal){ bestVal=v; bestIdx=i; }
+  });
+  const firstOpen = cls.findIndex(c=>c==='open');
+  const firstAny  = cls.findIndex(c=>c!=='shut');
+
+  // bandeau horaire
+  $('fcStrip').innerHTML = fc.hours.map((h,i)=>{
+    const now = i===0 ? ' now' : '';
+    const best = i===bestIdx ? ' best' : '';
+    const rain = (h.precip!=null && h.precip>0.2) ? '<div class="rain" title="pluie">💧</div>' : '<div class="rain"></div>';
+    return `<div class="fc-h"><div class="hr">${h.label}h</div>`
+      +`<div class="col ${cls[i]}${now}${best}"></div>`
+      +`<div class="t">${Math.round(h.t)}°</div>${rain}</div>`;
+  }).join('');
+
+  // phrase de conseil
+  const lab = i => fc.hours[i].label+'h';
+  let adv;
+  if(mode==='cool'){
+    if(firstAny<0){
+      adv=`Aucun créneau favorable d'ici ${lab(fc.hours.length-1)} : il fera aussi chaud ou plus chaud dehors. <b>Garde fermé, volets baissés.</b>`;
+    } else if(cls[0]!=='shut'){
+      const tail = bestIdx>0 ? ` Le plus efficace vers <b>${lab(bestIdx)}</b> (${Math.round(fc.hours[bestIdx].t)} °C).` : '';
+      adv=`<b>Ouvre maintenant</b> — c'est déjà favorable.${tail}`;
+    } else {
+      const startTxt = firstOpen>=0 ? `<b>Ouvre vers ${lab(firstOpen)}</b>` : `<b>Ouvre vers ${lab(firstAny)}</b> (frais mais un peu humide)`;
+      const bestTxt = bestIdx>=0 && bestIdx!==firstOpen ? ` ; idéal vers <b>${lab(bestIdx)}</b> (${Math.round(fc.hours[bestIdx].t)} °C).` : '.';
+      adv=`Pas encore le moment. ${startTxt}, quand l'extérieur passe sous ta température intérieure${bestTxt}`;
+    }
+  } else {
+    const inBand = RHin>=lo && RHin<=hi;
+    if(inBand){
+      adv=`Tu es <b>déjà dans la zone confortable</b> (${Math.round(RHin)} %). Rien à corriger : aère quand tu veux pour l'air vicié — les heures en vert te maintiennent dans la fourchette.`;
+    } else if(RHin>hi){ // trop humide
+      if(firstOpen<0 && firstAny<0){
+        adv=`Trop humide (${Math.round(RHin)} %) mais <b>aucun créneau asséchant</b> d'ici ${lab(fc.hours.length-1)} : l'air du dehors est trop chargé. Aère juste un peu, et pense au déshumidificateur si ça dure.`;
+      } else if(cls[0]!=='shut'){
+        const tail = bestIdx>=0 ? ` Le plus efficace vers <b>${lab(bestIdx)}</b>.` : '';
+        adv=`<b>Aère maintenant</b> pour redescendre vers ${lo}–${hi} %.${tail}`;
+      } else {
+        const start = firstOpen>=0 ? firstOpen : firstAny;
+        adv=`<b>Aère vers ${lab(start)}</b>, quand l'air du dehors devient assez sec pour te ramener vers ${lo}–${hi} %${bestIdx>=0?` (idéal vers ${lab(bestIdx)})`:''}.`;
+      }
+    } else { // trop sec
+      adv = firstOpen>=0
+        ? `Plutôt sec (${Math.round(RHin)} %). <b>Aère vers ${lab(firstOpen)}</b>, quand l'air entrant est assez humide pour remonter vers ${lo} %.`
+        : `Plutôt sec (${Math.round(RHin)} %) et l'air du dehors n'aiderait pas : <b>inutile d'aérer pour l'humidité</b> sur la période. Aère juste pour l'air vicié.`;
+    }
+  }
+  $('fcAdvice').innerHTML=adv;
+}
+
+compute();
+</script>
+</body>
+</html>
