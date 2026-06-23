@@ -95,6 +95,11 @@
   .fetch:hover{background:var(--surface-2); border-color:var(--cool-2);}
   .fetch[disabled]{opacity:.6; cursor:wait;}
   .fetch-msg{font-size:11px; color:var(--faint); margin-top:7px; min-height:14px;}
+  .model-row{display:flex; align-items:center; gap:10px; margin-top:9px;}
+  .model-row label{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em;}
+  .model{flex:1; background:var(--bg); border:1px solid var(--line); color:var(--ink);
+    font-family:var(--body); font-size:13px; border-radius:9px; padding:8px 10px; cursor:pointer;}
+  .model:focus{outline:none; border-color:var(--cool-2);}
 
   /* verdict — la signature */
   .verdict{position:relative; overflow:hidden; margin:18px 0;
@@ -234,6 +239,16 @@
       <div class="city-row">
         <input type="text" id="city" class="city" placeholder="Ville (ex. Nantes, Lyon, Lisboa…)" value="Nantes" autocomplete="off">
         <button class="fetch" id="fetchBtn" onclick="fetchOutside()">⤓ Relever</button>
+      </div>
+      <div class="model-row">
+        <label for="model">Modèle</label>
+        <select id="model" class="model">
+          <option value="meteofrance_seamless" selected>Météo-France (AROME)</option>
+          <option value="best_match">Best match (auto)</option>
+          <option value="ecmwf_ifs025">ECMWF (Europe)</option>
+          <option value="icon_seamless">DWD ICON (Allemagne)</option>
+          <option value="gfs_seamless">NOAA GFS (USA)</option>
+        </select>
       </div>
       <div class="fetch-msg" id="fetchMsg"></div>
     </div>
@@ -378,13 +393,19 @@ async function fetchOutside(){
     if(!g.results || !g.results.length) throw {kind:'notfound'};
     const r=g.results[0];
     const place=[r.name, r.admin1, r.country].filter(Boolean).join(', ');
+    // modèle météo choisi
+    const modelSel=$('model');
+    const model=modelSel.value;
+    const modelLabel=modelSel.options[modelSel.selectedIndex].text;
     // 2) coordonnées -> météo courante + prévision horaire (+ pluie, vent)
     const wURL='https://api.open-meteo.com/v1/forecast?latitude='+r.latitude
       +'&longitude='+r.longitude
       +'&current=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m'
-      +'&hourly=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m&forecast_days=2&timezone=auto';
+      +'&hourly=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m'
+      +'&models='+model+'&forecast_days=2&timezone=auto';
     const w=await (await fetch(wURL)).json();
-    const t=w.current.temperature_2m, h=w.current.relative_humidity_2m;
+    const t=w.current && w.current.temperature_2m, h=w.current && w.current.relative_humidity_2m;
+    if(t==null || h==null) throw {kind:'nodata'}; // modèle sans données sur cette zone
     $('tout').value=t; $('toutN').value=t;
     $('hout').value=h; $('houtN').value=h;
     ext={precip:w.current.precipitation, wind:w.current.wind_speed_10m};
@@ -396,6 +417,7 @@ async function fetchOutside(){
       if(i0<0) i0=0;
       fc={place, hours:[]};
       for(let i=i0; i<Math.min(i0+18, w.hourly.time.length); i++){
+        if(w.hourly.temperature_2m[i]==null) continue;
         fc.hours.push({t:w.hourly.temperature_2m[i], rh:w.hourly.relative_humidity_2m[i],
           precip:w.hourly.precipitation[i], wind:w.hourly.wind_speed_10m[i],
           label:w.hourly.time[i].slice(11,13)});
@@ -403,16 +425,19 @@ async function fetchOutside(){
     }
     compute();
     msg.style.color='var(--cool)';
-    msg.textContent=`${place} · ${t} °C, ${h} % · ${new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}`;
+    msg.textContent=`${place} · ${t} °C, ${h} % · ${modelLabel} · ${new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}`;
   }catch(e){
     msg.style.color='var(--hot)';
     msg.textContent = e && e.kind==='notfound'
       ? 'Ville introuvable — précise (ex. « Nantes, France »).'
+      : e && e.kind==='nodata'
+      ? 'Ce modèle ne couvre pas cette zone — repasse en « Best match (auto) ».'
       : "Relevé bloqué ici (aperçu). Une fois le fichier en ligne ou ouvert en local, ça marche. Sinon saisis à la main.";
   }finally{ btn.disabled=false; }
 }
-// Entrée clavier déclenche le relevé
+// Entrée clavier déclenche le relevé ; changer de modèle relance le relevé (comparaison)
 document.getElementById('city').addEventListener('keydown',e=>{ if(e.key==='Enter') fetchOutside(); });
+document.getElementById('model').addEventListener('change',()=>{ if(fc||ext) fetchOutside(); });
 
 // --- moteur de décision ---
 function compute(){
